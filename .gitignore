@@ -1,0 +1,8 @@
+__pycache__/
+logs/*
+!logs/.gitkeep
+venv/
+analysis_results/*
+!analysis_results/.gitkeep
+data/*
+!data/.gitkeep
