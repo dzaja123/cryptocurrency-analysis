@@ -57,14 +57,33 @@ class CryptoAnalyzer:
     def load_data(self):
         """Load and preprocess the cryptocurrency data."""
         try:
+            if not os.path.exists(self.csv_file_path):
+                logger.warning("CSV file not found at '%s'. Creating an empty file with headers.", self.csv_file_path)
+                # Create the directory if it doesn't exist
+                os.makedirs(os.path.dirname(self.csv_file_path), exist_ok=True)
+                # Create an empty CSV with headers
+                empty_df = pd.DataFrame(columns=['date', 'symbol', 'open', 'high', 'low', 'close', 'volume'])
+                empty_df.to_csv(self.csv_file_path, index=False)
+                self.data = empty_df
+                return
+
             self.data = pd.read_csv(self.csv_file_path)
+            if len(self.data) == 0:
+                logger.warning("CSV file is empty. No data to analyze.")
+                return
+
             self.data['date'] = pd.to_datetime(self.data['date'])
             self.data = self.data.sort_values('date')
             logger.info("Successfully loaded data from '%s' with %d records", 
                        self.csv_file_path, len(self.data))
+        except pd.errors.EmptyDataError:
+            logger.warning("CSV file is empty. Creating with headers.")
+            empty_df = pd.DataFrame(columns=['date', 'symbol', 'open', 'high', 'low', 'close', 'volume'])
+            empty_df.to_csv(self.csv_file_path, index=False)
+            self.data = empty_df
         except Exception as e:
             logger.error("Failed to load data from '%s': %s", self.csv_file_path, str(e))
-            raise
+            raise RuntimeError(f"Failed to load or create data file: {str(e)}")
 
     def calculate_technical_indicators(self, coin: str) -> pd.DataFrame:
         """Calculate various technical indicators for a specific coin."""
