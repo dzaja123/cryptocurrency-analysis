@@ -7,6 +7,8 @@ a modern GUI interface for user interaction.
 """
 
 from PIL import Image, ImageTk
+import os
+import pandas as pd
 
 from crypto_data_fetcher.crypto_data_fetcher import CryptoDataFetcher
 from crypto_analyzer.crypto_analyzer import CryptoAnalyzer
@@ -56,18 +58,36 @@ class CryptoApp:
                 coin = self.gui.current_coin
                 if coin != "ALL COINS":
                     self.selected_coin = coin
-                    # Find the coin configuration from the data fetcher
-                    coin_config = next(
-                        (c for c in self.data_fetcher.coins if c['symbol'].split('/')[0] == coin),
-                        None
+                    # Create coin configuration for manually added coins
+                    symbol = f"{coin}/USDT"
+                    coin_config = {
+                        'symbol': symbol,
+                        'exchange': 'binance'  # Using binance as default exchange
+                    }
+                    
+                    historical_data = self.data_fetcher.fetch_historical_data(
+                        coin_config['symbol'],
+                        coin_config['exchange']
                     )
-                    if coin_config:
-                        historical_data = self.data_fetcher.fetch_historical_data(
-                            coin_config['symbol'],
-                            coin_config['exchange']
-                        )
-                    else:
-                        raise Exception(f"Configuration not found for coin: {coin}")
+                    
+                    # Save the fetched data
+                    if not historical_data.empty:
+                        # Ensure the data directory exists
+                        os.makedirs(os.path.dirname(self.analyzer.csv_file_path), exist_ok=True)
+                        
+                        # If file exists, append new data, otherwise create new file
+                        if os.path.exists(self.analyzer.csv_file_path):
+                            existing_data = pd.read_csv(self.analyzer.csv_file_path)
+                            # Remove existing data for this coin to avoid duplicates
+                            existing_data = existing_data[~existing_data['coin'].str.startswith(coin)]
+                            # Combine existing data with new data
+                            combined_data = pd.concat([existing_data, historical_data], ignore_index=True)
+                            combined_data.to_csv(self.analyzer.csv_file_path, index=False)
+                        else:
+                            historical_data.to_csv(self.analyzer.csv_file_path, index=False)
+                        
+                        # Reload data in analyzer
+                        self.analyzer.load_data()
                 else:
                     historical_data = self.data_fetcher.fetch_all_data()
             else:
@@ -85,45 +105,47 @@ class CryptoApp:
     def analyze_data(self):
         """Analyze cryptocurrency data."""
         try:
+            output_path = None
             logger.info("Starting data analysis...")
             if hasattr(self.gui, 'current_coin'):
                 coin = self.gui.current_coin
                 if coin != "ALL COINS":
                     self.selected_coin = coin
+                    # Reload data to ensure we have the latest
+                    self.analyzer.load_data()
+                    
                     # Check if we have data for this coin
                     coin_data = self.analyzer.data[self.analyzer.data['coin'].str.startswith(coin)]
                     if coin_data.empty:
                         raise Exception(f"No data available for {coin}. Please fetch data first.")
 
-                    # Find the full coin symbol from config
-                    coin_config = next(
-                        (c for c in self.data_fetcher.coins if c['symbol'].split('/')[0] == coin),
-                        None
-                    )
-                    if not coin_config:
-                        raise Exception(f"Configuration not found for coin: {coin}")
+                    # Create coin configuration for manually added coins
+                    symbol = f"{coin}/USDT"
 
-                    # Analyze the specific coin
-                    self.analyzer.calculate_technical_indicators(coin_config['symbol'])
-                    self.analyzer.predict_future_prices(coin_config['symbol'])
-
-                    # Generate plots with selected format
-                    png_path = self.analyzer.plot_analysis(
-                        coin_config['symbol'],
-                        export_format=self.export_format
-                    )
-
-                    # Display the PNG in the canvas
-                    if hasattr(self.gui, 'result_canvas'):
-                        self.display_result_image(png_path)
-
+                    # Calculate technical indicators
+                    self.analyzer.calculate_technical_indicators(symbol)
+                    
+                    # Predict future prices
+                    self.analyzer.predict_future_prices(symbol)
+                    
+                    # Generate and save the analysis plots
+                    output_path = self.analyzer.plot_analysis(coin, export_format=self.export_format)
+                    
                     logger.info("Analysis completed for %s", coin)
                 else:
+                    # Analyze all coins
                     self._analyze_all_coins()
-            else:
-                self._analyze_all_coins()
+                    logger.info("Analysis completed for all coins")
 
-            logger.info("Analysis completed")
+                if output_path:
+                    self.display_result_image(output_path)
+                    logger.info("Result image displayed for %s", coin)
+
+            else:
+                # Default to analyzing all coins if no coin is selected
+                self._analyze_all_coins()
+                logger.info("Analysis completed for all coins")
+
         except Exception as e:
             logger.error("Error during analysis: %s", str(e))
             raise
@@ -170,23 +192,41 @@ class CryptoApp:
                 logger.error("Error analyzing %s: %s", coin, str(e))
                 continue
 
+    def search_coin(self, symbol: str) -> bool:
+        """Search if a coin exists on the exchange."""
+        try:
+            return self.data_fetcher.search_coin(symbol)
+        except Exception as e:
+            logger.error("Error searching for coin: %s", str(e))
+            raise
+
+    def fetch_top_coins(self) -> list:
+        """Fetch top 15 coins by market cap."""
+        try:
+            return self.data_fetcher.fetch_top_coins(limit=15)
+        except Exception as e:
+            logger.error("Error fetching top coins: %s", str(e))
+            raise
+
 
 def main():
     """Main function to run the cryptocurrency analysis application."""
     try:
         logger.info("Starting Crypto Analysis Application")
         # Initialize the application
-        app = CryptoApp(config_file="config.yaml")
+        config_file = "config.yaml"
+        app = CryptoApp(config_file)
 
         # Create and run the GUI
-        gui = CryptoGUI(
+        app.gui = CryptoGUI(
             fetch_data_callback=app.fetch_data,
             analyze_data_callback=app.analyze_data,
-            set_export_format_callback=app.set_export_format
+            set_export_format_callback=app.set_export_format,
+            search_coin_callback=app.search_coin,
+            fetch_top_coins_callback=app.fetch_top_coins
         )
-        # Store reference to GUI for accessing selected coin
-        app.gui = gui
-        gui.run()
+        # Start the GUI event loop
+        app.gui.run()
 
     except Exception as e:
         logger.error("Application error: %s", str(e))

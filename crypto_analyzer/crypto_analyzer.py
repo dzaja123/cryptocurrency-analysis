@@ -67,7 +67,7 @@ class CryptoAnalyzer:
                 os.makedirs(os.path.dirname(self.csv_file_path), exist_ok=True)
                 # Create an empty CSV with headers
                 empty_df = pd.DataFrame(
-                    columns=['date', 'symbol', 'open', 'high', 'low', 'close', 'volume']
+                    columns=['date', 'coin', 'open', 'high', 'low', 'close', 'volume']
                 )
                 empty_df.to_csv(self.csv_file_path, index=False)
                 self.data = empty_df
@@ -78,142 +78,205 @@ class CryptoAnalyzer:
                 logger.warning("CSV file is empty. No data to analyze.")
                 return
 
-            self.data['date'] = pd.to_datetime(self.data['date'])
+            # Handle datetime parsing with a more flexible format
+            self.data['date'] = pd.to_datetime(self.data['date'], format='mixed')
             self.data = self.data.sort_values('date')
             logger.info(
                 "Successfully loaded data from '%s' with %d records",
                 self.csv_file_path,
                 len(self.data)
             )
-        except pd.errors.EmptyDataError:
-            logger.warning("CSV file is empty. Creating with headers.")
-            empty_df = pd.DataFrame(
-                columns=['date', 'symbol', 'open', 'high', 'low', 'close', 'volume']
-            )
-            empty_df.to_csv(self.csv_file_path, index=False)
-            self.data = empty_df
         except Exception as e:
             logger.error("Failed to load data from '%s': %s", self.csv_file_path, str(e))
-            raise RuntimeError(f"Failed to load or create data file: {str(e)}")
+            raise
 
     def calculate_technical_indicators(self, coin: str) -> pd.DataFrame:
         """Calculate various technical indicators for a specific coin."""
         try:
             logger.info("Calculating technical indicators for %s", coin)
-            coin_data = self.data[self.data['coin'] == coin].copy()
+            # Extract base coin from symbol if needed (e.g., "BTC/USDT" -> "BTC")
+            base_coin = coin.split('/')[0] if '/' in coin else coin
+            
+            # Filter data for the specific coin
+            coin_data = self.data[self.data['coin'] == base_coin].copy()
+            
             if coin_data.empty:
                 logger.warning("No data found for coin %s", coin)
                 return pd.DataFrame()
-
-            # Moving averages
-            coin_data['MA7'] = coin_data['close'].rolling(window=7).mean()
-            coin_data['MA20'] = coin_data['close'].rolling(window=20).mean()
-            coin_data['MA50'] = coin_data['close'].rolling(window=50).mean()
-
-            # RSI
+                
+            # Sort by date
+            coin_data = coin_data.sort_values('date')
+            
+            # Calculate technical indicators
+            coin_data['SMA_20'] = coin_data['close'].rolling(window=20).mean()
+            coin_data['SMA_50'] = coin_data['close'].rolling(window=50).mean()
+            coin_data['SMA_200'] = coin_data['close'].rolling(window=200).mean()
+            
+            # Calculate RSI
             delta = coin_data['close'].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
             rs = gain / loss
             coin_data['RSI'] = 100 - (100 / (1 + rs))
-
-            # MACD
+            
+            # Calculate MACD
             exp1 = coin_data['close'].ewm(span=12, adjust=False).mean()
             exp2 = coin_data['close'].ewm(span=26, adjust=False).mean()
             coin_data['MACD'] = exp1 - exp2
             coin_data['Signal_Line'] = coin_data['MACD'].ewm(span=9, adjust=False).mean()
-
-            # Bollinger Bands
+            
+            # Calculate Bollinger Bands
             coin_data['BB_middle'] = coin_data['close'].rolling(window=20).mean()
-            coin_data['BB_upper'] = (coin_data['BB_middle'] +
-                                     2 * coin_data['close'].rolling(window=20).std())
-            coin_data['BB_lower'] = (coin_data['BB_middle'] -
-                                     2 * coin_data['close'].rolling(window=20).std())
-
-            logger.info("Successfully calculated technical indicators for %s", coin)
+            bb_std = coin_data['close'].rolling(window=20).std()
+            coin_data['BB_upper'] = coin_data['BB_middle'] + (bb_std * 2)
+            coin_data['BB_lower'] = coin_data['BB_middle'] - (bb_std * 2)
+            
+            logger.info("Technical indicators calculated successfully for %s", coin)
             return coin_data
+            
         except Exception as e:
-            logger.error("Failed to calculate technical indicators for %s: %s", coin, str(e))
+            logger.error("Error calculating technical indicators for %s: %s", coin, str(e))
             raise
 
-    def prepare_prediction_data(self, coin_data: pd.DataFrame, lookback: int = 60) -> tuple:
-        """Prepare data for prediction model."""
-        scaler = MinMaxScaler()
-        scaled_data = scaler.fit_transform(coin_data[['close']].values)
-
-        X, y = [], []
-        for i in range(lookback, len(scaled_data)):
-            X.append(scaled_data[i-lookback:i, 0])
-            y.append(scaled_data[i, 0])
-
-        X, y = np.array(X), np.array(y)
-        return X, y, scaler
+    def prepare_prediction_data(self, data: pd.DataFrame, lookback: int = 60) -> tuple:
+        """Prepare data for prediction model.
+        
+        Args:
+            data (pd.DataFrame): Input data with features
+            lookback (int): Number of previous time steps to use for prediction
+            
+        Returns:
+            tuple: (X, y) where X is the input features and y is the target values
+        """
+        try:
+            # Convert DataFrame to numpy array
+            values = data.values
+            
+            # Create sequences of lookback days
+            X, y = [], []
+            for i in range(lookback, len(values)):
+                X.append(values[i-lookback:i])
+                y.append(values[i, 3])  # Close price is at index 3
+                
+            # Convert to numpy arrays
+            X = np.array(X)
+            y = np.array(y)
+            
+            # Reshape X to 2D array for RandomForest (samples, features)
+            n_samples = X.shape[0]
+            n_features = X.shape[1] * X.shape[2]
+            X = X.reshape((n_samples, n_features))
+            
+            return X, y
+            
+        except Exception as e:
+            logger.error("Error preparing prediction data: %s", str(e))
+            raise
 
     def predict_future_prices(self, coin: str, days_ahead: int = 730) -> pd.DataFrame:
         """Predict future prices using Random Forest model."""
         try:
             logger.info("Predicting future prices for %s over %d days", coin, days_ahead)
-            coin_data = self.data[self.data['coin'] == coin].copy()
-
-            # Prepare features for Random Forest
-            lookback = 60
-            features = ['open', 'high', 'low', 'close', 'volume']
-            rf_data = coin_data[features].values
-            X, y = [], []
-
-            for i in range(lookback, len(rf_data)):
-                X.append(rf_data[i-lookback:i].flatten())
-                y.append(rf_data[i, 3])  # Close price
-
-            X, y = np.array(X), np.array(y)
-
-            # Train Random Forest model
+            # Extract base coin from symbol if needed
+            base_coin = coin.split('/')[0] if '/' in coin else coin
+            
+            # Get data for the specific coin
+            coin_data = self.data[self.data['coin'] == base_coin].copy()
+            
+            if coin_data.empty:
+                logger.warning("No data found for coin %s", coin)
+                return pd.DataFrame()
+            
+            # Sort by date
+            coin_data = coin_data.sort_values('date')
+            
+            # Prepare features - use same features for training and prediction
+            features = ['open', 'high', 'low', 'close', 'volume', 'SMA_20', 'SMA_50']
+            
+            # Calculate technical indicators for features
+            coin_data['SMA_20'] = coin_data['close'].rolling(window=20).mean()
+            coin_data['SMA_50'] = coin_data['close'].rolling(window=50).mean()
+            
+            # Drop rows with NaN values
+            coin_data = coin_data.dropna()
+            
+            if len(coin_data) < 60:  # Minimum required data points
+                logger.warning("Insufficient data points for prediction")
+                return pd.DataFrame()
+            
+            # Prepare data for prediction
+            feature_data = coin_data[features].copy()
+            X, y = self.prepare_prediction_data(feature_data, lookback=60)
+            
+            if len(X) == 0:
+                logger.warning("No valid data after preparation")
+                return pd.DataFrame()
+            
+            # Train model
             model = RandomForestRegressor(n_estimators=100, random_state=42)
             model.fit(X, y)
-
-            # Generate future dates
-            last_date = coin_data['date'].iloc[-1]
-            future_dates = pd.date_range(
-                start=last_date + timedelta(days=1),
-                periods=days_ahead,
-                freq='D'
-            )
-
+            
+            # Prepare last known data point for prediction
+            last_data = feature_data.iloc[-60:].values
+            last_sequence = last_data.reshape(1, -1)
+            
             # Make predictions
+            future_dates = pd.date_range(
+                start=coin_data['date'].iloc[-1],
+                periods=days_ahead + 1,
+                freq='D'
+            )[1:]
+            
             predictions = []
-            last_sequence = X[-1]
-
-            for _ in range(days_ahead):
-                pred_price = model.predict(last_sequence.reshape(1, -1))[0]
-                predictions.append(pred_price)
-                # Update the sequence for next prediction
-                last_sequence = np.roll(last_sequence, -5)
-                last_sequence[-5:] = [pred_price] * 5
-
+            current_sequence = last_sequence
+            
+            # Initial prediction
+            pred = model.predict(current_sequence)[0]
+            predictions.append(pred)
+            
+            # Update sequence for subsequent predictions
+            for _ in range(1, days_ahead):
+                # Update the sequence by shifting and adding new prediction
+                new_row = np.zeros(len(features))  # Create new row with features
+                new_row[3] = pred  # Set close price (index 3)
+                new_row[5] = np.mean(predictions[-20:]) if len(predictions) >= 20 else pred  # SMA_20
+                new_row[6] = np.mean(predictions[-50:]) if len(predictions) >= 50 else pred  # SMA_50
+                
+                # Shift sequence and add new row
+                current_sequence = current_sequence.reshape(-1, len(features))
+                current_sequence = np.vstack([current_sequence[1:], new_row])
+                current_sequence = current_sequence.reshape(1, -1)
+                
+                # Make next prediction
+                pred = model.predict(current_sequence)[0]
+                predictions.append(pred)
+            
             # Create prediction DataFrame
-            predictions_df = pd.DataFrame({
+            pred_df = pd.DataFrame({
                 'date': future_dates,
-                'prediction': predictions
+                'predicted_price': predictions
             })
-
-            logger.info("Successfully generated price predictions for %s", coin)
-            return predictions_df
+            
+            logger.info("Price predictions completed for %s", coin)
+            return pred_df
+            
         except Exception as e:
             logger.error("Failed to predict prices for %s: %s", coin, str(e))
             raise
 
-    def plot_analysis(self, coin: str, export_format='png'):
-        """Create comprehensive interactive plots for analysis.
-        
-        Args:
-            coin (str): The cryptocurrency symbol to analyze
-            export_format (str): Export format - 'png' or 'both' for PNG and HTML
-        """
+    def plot_analysis(self, coin: str, export_format='png') -> str:
+        """Create comprehensive interactive plots for analysis."""
         try:
-            logger.info("Creating analysis plot for %s", coin)
-            # Remove /USDT from coin name
-            coin_name = coin.split('/')[0]
-
+            # Extract base coin from symbol if needed
+            base_coin = coin.split('/')[0] if '/' in coin else coin
+            
+            # Get the data for this coin
+            coin_data = self.data[self.data['coin'] == base_coin].copy()
+            
+            if coin_data.empty:
+                logger.warning("No data found for plotting analysis of %s", coin)
+                return ""
+            
             coin_data = self.calculate_technical_indicators(coin)
             predictions = self.predict_future_prices(coin)
 
@@ -243,8 +306,8 @@ class CryptoAnalyzer:
             fig.add_trace(
                 go.Scatter(
                     x=coin_data['date'],
-                    y=coin_data['MA7'],
-                    name='MA7',
+                    y=coin_data['SMA_20'],
+                    name='SMA_20',
                     line=dict(color='blue')
                 ),
                 row=1,
@@ -254,8 +317,8 @@ class CryptoAnalyzer:
             fig.add_trace(
                 go.Scatter(
                     x=coin_data['date'],
-                    y=coin_data['MA20'],
-                    name='MA20',
+                    y=coin_data['SMA_50'],
+                    name='SMA_50',
                     line=dict(color='orange')
                 ),
                 row=1,
@@ -265,8 +328,8 @@ class CryptoAnalyzer:
             fig.add_trace(
                 go.Scatter(
                     x=coin_data['date'],
-                    y=coin_data['MA50'],
-                    name='MA50',
+                    y=coin_data['SMA_200'],
+                    name='SMA_200',
                     line=dict(color='green')
                 ),
                 row=1,
@@ -277,7 +340,7 @@ class CryptoAnalyzer:
             fig.add_trace(
                 go.Scatter(
                     x=predictions['date'],
-                    y=predictions['prediction'],
+                    y=predictions['predicted_price'],
                     name='Price Prediction',
                     line=dict(color='red', dash='dash')
                 ),
@@ -349,7 +412,7 @@ class CryptoAnalyzer:
 
             # Update layout
             fig.update_layout(
-                title=f'{coin_name} Analysis and Predictions',
+                title=f'{base_coin} Analysis and Predictions',
                 xaxis4_title="Date",
                 height=1800,
                 showlegend=True,
@@ -359,7 +422,7 @@ class CryptoAnalyzer:
             )
 
             # Save PNG by default
-            output_path_png = os.path.join(self.output_dir, f'analysis_{coin_name.lower()}.png')
+            output_path_png = os.path.join(self.output_dir, f'analysis_{base_coin.lower()}.png')
             fig.write_image(output_path_png, engine='kaleido', scale=2)
             logger.info(
                 "Successfully saved PNG analysis plot for %s to '%s'",
@@ -371,7 +434,7 @@ class CryptoAnalyzer:
             if export_format == 'both':
                 output_path_html = os.path.join(
                     self.output_dir,
-                    f'analysis_{coin_name.lower()}.html'
+                    f'analysis_{base_coin.lower()}.html'
                 )
                 fig.write_html(output_path_html)
                 logger.info(
