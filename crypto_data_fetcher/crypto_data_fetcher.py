@@ -5,16 +5,19 @@ This module handles fetching historical cryptocurrency data from various exchang
 using the CCXT library.
 """
 
+from datetime import datetime
+
 import time
 import yaml
 import ccxt
+
 import pandas as pd
 
-from datetime import datetime, timedelta
 from utils import setup_logger
 
 # Set up logger for this module
 logger = setup_logger()
+
 
 class CryptoDataFetcher:
     """Class for fetching and processing crypto data."""
@@ -27,7 +30,11 @@ class CryptoDataFetcher:
             self.end_date = datetime.now()
         else:
             self.end_date = datetime.strptime(self.end_date, "%Y-%m-%d")
-        logger.info("Configuration loaded. Start date: %s, End date: %s", self.start_date, self.end_date)
+        logger.info(
+            "Configuration loaded. Start date: %s, End date: %s",
+            self.start_date,
+            self.end_date
+        )
 
     def load_config(self) -> tuple:
         """Load coin configurations, CSV file path, and date range from a YAML file."""
@@ -35,7 +42,12 @@ class CryptoDataFetcher:
             with open(self.config_file, 'r', encoding="utf-8") as file:
                 config = yaml.safe_load(file)
             logger.info("Configuration successfully loaded from YAML.")
-            return config['coins'], config['csv_file_path'], config['start_date'], config['end_date']
+            return (
+                config['coins'],
+                config['csv_file_path'],
+                config['start_date'],
+                config['end_date']
+            )
         except Exception as e:
             logger.error("Error loading configuration: %s", e)
             raise
@@ -57,7 +69,12 @@ class CryptoDataFetcher:
                 since = ohlcv[-1][0] + 86400000
                 time.sleep(exchange_class.rateLimit / 1000)
             except ccxt.NetworkError as e:
-                logger.error("Network error while fetching data for %s on %s: %s", symbol, exchange, e)
+                logger.error(
+                    "Network error while fetching data for %s on %s: %s",
+                    symbol,
+                    exchange,
+                    e
+                )
                 break
             except ccxt.ExchangeError as e:
                 logger.error("Exchange error for %s on %s: %s", symbol, exchange, e)
