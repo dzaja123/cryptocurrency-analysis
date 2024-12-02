@@ -6,32 +6,36 @@ by utilizing the CryptoDataFetcher and CryptoAnalyzer classes, and provides
 a modern GUI interface for user interaction.
 """
 
-from PIL import Image, ImageTk
 import os
 import pandas as pd
+
+from PIL import Image, ImageTk
+import customtkinter as ctk
 
 from crypto_data_fetcher.crypto_data_fetcher import CryptoDataFetcher
 from crypto_analyzer.crypto_analyzer import CryptoAnalyzer
 from crypto_gui.crypto_gui import CryptoGUI
 
-from utils import setup_logger
+from utils.logger_setup import LoggerManager
+from utils.config_manager import ConfigManager
 
-# Set up centralized logging
-logger = setup_logger()
+# Set up centralized logging and configuration
+logger = LoggerManager.setup_logger()
 
 
 class CryptoApp:
     """CryptoApp class for cryptocurrency analysis application."""
     def __init__(self, config_file):
         """Initialize the cryptocurrency analysis application."""
-        # Configuration file path
-        self.config_file = config_file
+        # Configuration management
+        self.config_manager = ConfigManager(config_file)
+        self.config = self.config_manager.get_config()
 
         # Data fetcher instance
-        self.data_fetcher = CryptoDataFetcher(self.config_file)
+        self.data_fetcher = CryptoDataFetcher(self.config_manager)
 
         # Data analyzer instance
-        self.analyzer = CryptoAnalyzer(self.config_file)
+        self.analyzer = CryptoAnalyzer(self.config_manager)
 
         # Track currently selected coin
         self.selected_coin = None
@@ -44,11 +48,21 @@ class CryptoApp:
 
         # Default export format
         self.export_format = "png"
+        
+        # Date range
+        self.start_date = None
+        self.end_date = None
 
     def set_export_format(self, value):
         """Set the export format from GUI."""
         self.export_format = value
         logger.debug("Export format set to: %s", value)
+
+    def set_date_range(self, start_date: str, end_date: str):
+        """Set the date range for data fetching."""
+        self.start_date = start_date
+        self.end_date = end_date
+        logger.info(f"Date range updated: {start_date} to {end_date}")
 
     def fetch_data(self):
         """Fetch historical cryptocurrency data."""
@@ -67,7 +81,9 @@ class CryptoApp:
                     
                     historical_data = self.data_fetcher.fetch_historical_data(
                         coin_config['symbol'],
-                        coin_config['exchange']
+                        coin_config['exchange'],
+                        start_date=self.start_date,
+                        end_date=self.end_date
                     )
                     
                     # Save the fetched data
@@ -89,9 +105,15 @@ class CryptoApp:
                         # Reload data in analyzer
                         self.analyzer.load_data()
                 else:
-                    historical_data = self.data_fetcher.fetch_all_data()
+                    historical_data = self.data_fetcher.fetch_all_data(
+                        start_date=self.start_date,
+                        end_date=self.end_date
+                    )
             else:
-                historical_data = self.data_fetcher.fetch_all_data()
+                historical_data = self.data_fetcher.fetch_all_data(
+                    start_date=self.start_date,
+                    end_date=self.end_date
+                )
 
             if historical_data.empty:
                 logger.error("No data was fetched")
@@ -151,29 +173,35 @@ class CryptoApp:
             raise
 
     def display_result_image(self, image_path):
-        """Display the analysis result image in the scrollable canvas."""
+        """Display the analysis result image in the GUI."""
         try:
             # Load and resize image
             image = Image.open(image_path)
 
             # Calculate new width while maintaining aspect ratio
             canvas_width = self.gui.result_canvas.winfo_width()
+            if canvas_width <= 1:  # If canvas not yet properly initialized
+                canvas_width = 800  # Default width
             ratio = canvas_width / image.width
             new_size = (int(image.width * ratio), int(image.height * ratio))
             image = image.resize(new_size, Image.Resampling.LANCZOS)
 
-            # Convert to PhotoImage
-            photo = ImageTk.PhotoImage(image)
+            # Convert to CTkImage
+            ctk_image = ctk.CTkImage(
+                light_image=image,
+                dark_image=image,
+                size=new_size
+            )
 
-            # Update canvas
-            self.gui.result_canvas.delete("all")
-            self.current_image = photo  # Keep a reference
-            self.gui.result_canvas.create_image(0, 0, anchor="nw", image=photo)
-            self.gui.result_canvas.config(scrollregion=(0, 0, new_size[0], new_size[1]))
-
+            # Update image label
+            self.current_image = ctk_image  # Keep a reference
+            self.gui.image_label.configure(image=ctk_image)
+            
+            # Update status
+            self.gui.status_label.configure(text=f"Analysis complete! Results displayed for {os.path.basename(image_path)}")
         except Exception as e:
             logger.error("Error displaying result image: %s", str(e))
-            raise
+            self.gui.status_label.configure(text=f"Error displaying result: {str(e)}")
 
     def _analyze_all_coins(self):
         """Helper method to analyze all coins."""
@@ -208,6 +236,17 @@ class CryptoApp:
             logger.error("Error fetching top coins: %s", str(e))
             raise
 
+    def initialize_gui(self):
+        """Initialize and configure the GUI."""
+        self.gui = CryptoGUI(
+            fetch_data_callback=self.fetch_data,
+            analyze_data_callback=self.analyze_data,
+            set_export_format_callback=self.set_export_format,
+            search_coin_callback=self.search_coin,
+            fetch_top_coins_callback=self.fetch_top_coins,
+            set_date_range_callback=self.set_date_range
+        )
+
 
 def main():
     """Main function to run the cryptocurrency analysis application."""
@@ -218,13 +257,7 @@ def main():
         app = CryptoApp(config_file)
 
         # Create and run the GUI
-        app.gui = CryptoGUI(
-            fetch_data_callback=app.fetch_data,
-            analyze_data_callback=app.analyze_data,
-            set_export_format_callback=app.set_export_format,
-            search_coin_callback=app.search_coin,
-            fetch_top_coins_callback=app.fetch_top_coins
-        )
+        app.initialize_gui()
         # Start the GUI event loop
         app.gui.run()
 

@@ -5,7 +5,6 @@ This module provides comprehensive analysis and visualization of cryptocurrency 
 including technical indicators, trend analysis, and price predictions.
 """
 
-from datetime import timedelta
 
 import os
 import yaml
@@ -15,44 +14,43 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.ensemble import RandomForestRegressor
 
-from utils import setup_logger
+from utils.logger_setup import LoggerManager
+from utils.config_manager import ConfigManager
 
-# Set up logger for this module
-logger = setup_logger()
+# Get logger instance
+logger = LoggerManager.get_logger()
 
 
 class CryptoAnalyzer:
     """Cryptocurrency Data Analyzer class."""
-    def __init__(self, config_file: str):
-        """Initialize the CryptoAnalyzer with the path to the config file."""
-        self.config_file = config_file
-        self.data = None
-        self.config = self.load_config()
+    def __init__(self, config_manager: ConfigManager):
+        """Initialize the CryptoAnalyzer with configuration manager."""
+        self.config_manager = config_manager
+        self.config = self.config_manager.get_config()
         self.csv_file_path = self.config['csv_file_path']
         self.output_dir = self.config['output_dir']
 
         # Create output directory if it doesn't exist
         os.makedirs(self.output_dir, exist_ok=True)
+        self.data = None
         self.load_data()
 
     def load_config(self):
         """Load configuration from YAML file."""
         try:
-            with open(self.config_file, 'r', encoding='utf-8') as file:
-                config = yaml.safe_load(file)
+            config = self.config_manager.get_config()
 
             # Convert relative paths to absolute paths
             base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             config['csv_file_path'] = os.path.join(base_dir, config['csv_file_path'])
             config['output_dir'] = os.path.join(base_dir, config['output_dir'])
 
-            logger.info("Configuration loaded successfully from '%s'", self.config_file)
+            logger.info("Configuration loaded successfully")
             return config
         except Exception as e:
-            logger.error("Failed to load configuration from '%s': %s", self.config_file, str(e))
+            logger.error("Failed to load configuration: %s", str(e))
             raise
 
     def load_data(self):
