@@ -82,8 +82,10 @@ class CryptoDataFetcher:
 
         if data:
             df = pd.DataFrame(data, columns=['date', 'open', 'high', 'low', 'close', 'volume'])
-            df['date'] = pd.to_datetime(df['date'], unit='ms')
-            df['coin'] = symbol
+            # Convert timestamp to datetime in ISO format
+            df['date'] = pd.to_datetime(df['date'], unit='ms').dt.strftime('%Y-%m-%d %H:%M:%S')
+            # Add coin column using base currency from symbol (e.g., 'BTC/USDT' -> 'BTC')
+            df['coin'] = symbol.split('/')[0]
             df['exchange'] = exchange
             return df
         return pd.DataFrame()
@@ -103,3 +105,36 @@ class CryptoDataFetcher:
                 logger.info("Data saved to %s", self.csv_file_path)
             return combined_data
         return pd.DataFrame()
+
+    def fetch_top_coins(self, limit: int = 15) -> list:
+        """Fetch top cryptocurrencies by market cap."""
+        try:
+            exchange = ccxt.binance()
+            markets = exchange.fetch_markets()
+            usdt_markets = [market for market in markets if market['quote'] == 'USDT']
+            
+            # Get tickers with volume info
+            tickers = exchange.fetch_tickers([market['symbol'] for market in usdt_markets[:50]])
+            
+            # Sort by volume and get top ones
+            sorted_markets = sorted(
+                [(symbol, ticker['quoteVolume']) for symbol, ticker in tickers.items()],
+                key=lambda x: x[1] or 0,
+                reverse=True
+            )
+            
+            return [{'symbol': symbol, 'exchange': 'binance'} for symbol, _ in sorted_markets[:limit]]
+        except Exception as e:
+            logger.error(f"Error fetching top coins: {e}")
+            return []
+
+    def search_coin(self, coin_symbol: str) -> bool:
+        """Search if a coin exists on the exchange."""
+        try:
+            exchange = ccxt.binance()
+            markets = exchange.fetch_markets()
+            symbol = f"{coin_symbol.upper()}/USDT"
+            return any(market['symbol'] == symbol for market in markets)
+        except Exception as e:
+            logger.error(f"Error searching for coin {coin_symbol}: {e}")
+            return False

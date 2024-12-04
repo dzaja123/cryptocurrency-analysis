@@ -24,7 +24,9 @@ class CryptoGUI:
         self,
         fetch_data_callback: callable,
         analyze_data_callback: callable,
-        set_export_format_callback: callable
+        set_export_format_callback: callable,
+        search_coin_callback: callable,
+        fetch_top_coins_callback: callable
         ):
         """Initialize the GUI with callback functions for data operations."""
         logger.info("Initializing Cryptocurrency Analysis GUI")
@@ -42,6 +44,8 @@ class CryptoGUI:
         self.fetch_data = fetch_data_callback
         self.analyze_data = analyze_data_callback
         self.set_export_format = set_export_format_callback
+        self.search_coin = search_coin_callback
+        self.fetch_top_coins = fetch_top_coins_callback
 
         # Load configuration
         self.config_file = 'config.yaml'
@@ -51,6 +55,7 @@ class CryptoGUI:
         self.main_area = None
         self.result_canvas = None
         self.current_image = None
+        self.current_image_path = None
         self.selected_coin = None
         self.coin_dropdown = None
         self.export_format = None
@@ -59,6 +64,9 @@ class CryptoGUI:
         self.analyze_button = None
         self.status_label = None
         self.current_coin = None
+        self.search_entry = None
+        self.search_loading = False
+        self.loading_label = None
 
         # Initialize GUI components
         self._create_sidebar()
@@ -67,16 +75,15 @@ class CryptoGUI:
         logger.info("GUI initialization completed")
 
     def _load_coins(self) -> list:
-        """Load available coins from configuration."""
+        """Load top 15 coins by market cap."""
         try:
-            with open(self.config_file, 'r', encoding='utf-8') as file:
-                config = yaml.safe_load(file)
-                coins = [coin['symbol'].split('/')[0] for coin in config.get('coins', [])]
-                coins.insert(0, "ALL COINS")  # Add "ALL COINS" option at the beginning
-                logger.info("Successfully loaded %d coins from configuration", len(coins)-1)
-                return coins
+            coins = self.fetch_top_coins()  # Get top 15 coins
+            coin_symbols = ["ALL COINS"]  # Add "ALL COINS" option at the beginning
+            coin_symbols.extend([coin['symbol'].split('/')[0] for coin in coins])
+            logger.info("Successfully loaded %d coins", len(coin_symbols)-1)
+            return coin_symbols
         except Exception as e:
-            logger.error("Failed to load coins from configuration: %s", str(e))
+            logger.error("Failed to load coins: %s", str(e))
             return ["ALL COINS"]  # Return at least "ALL COINS" option
 
     def _create_sidebar(self):
@@ -94,6 +101,36 @@ class CryptoGUI:
                 font=ctk.CTkFont(size=20, weight="bold")
             )
             title.pack(pady=10)
+
+            # Search frame
+            search_frame = ctk.CTkFrame(self.sidebar)
+            search_frame.pack(pady=5, padx=10, fill="x")
+
+            # Search entry
+            self.search_entry = ctk.CTkEntry(
+                search_frame,
+                placeholder_text="Search coin...",
+                width=120
+            )
+            self.search_entry.pack(side="left", padx=(0, 5))
+
+            # Add button
+            add_button = ctk.CTkButton(
+                search_frame,
+                text="+",
+                width=30,
+                command=self._handle_add_coin
+            )
+            add_button.pack(side="right")
+
+            # Loading label (hidden by default)
+            self.loading_label = ctk.CTkLabel(
+                self.sidebar,
+                text="Searching...",
+                text_color="gray"
+            )
+            self.loading_label.pack(pady=2)
+            self.loading_label.pack_forget()  # Hide initially
 
             # Coin selection
             coins = self._load_coins()
@@ -298,7 +335,6 @@ class CryptoGUI:
 
             logger.info("Analysis completed successfully for %s", selected_coin)
             self.status_label.configure(text=f"Analysis completed for {selected_coin}")
-            self._update_analysis_files()
         except Exception as e:
             error_msg = f"Error during analysis: {str(e)}"
             logger.error(error_msg)
@@ -441,6 +477,51 @@ class CryptoGUI:
             error_msg = f"Error viewing analysis: {str(e)}"
             logger.error(error_msg)
             self.status_label.configure(text=error_msg)
+
+    def _handle_add_coin(self):
+        """Handle adding a new coin from search."""
+        search_text = self.search_entry.get().strip().upper()
+        if not search_text:
+            self.status_label.configure(text="Please enter a coin symbol")
+            return
+
+        self.search_loading = True
+        self.loading_label.pack()  # Show loading label
+        self.search_entry.configure(state="disabled")
+        
+        def search_thread():
+            try:
+                exists = self.search_coin(search_text)
+                self.root.after(0, lambda: self._handle_search_result(search_text, exists))
+            except Exception as e:
+                self.root.after(0, lambda: self.status_label.configure(
+                    text=f"Error searching coin: {str(e)}"
+                ))
+            finally:
+                self.root.after(0, self._finish_search)
+
+        threading.Thread(target=search_thread, daemon=True).start()
+
+    def _handle_search_result(self, coin: str, exists: bool):
+        """Handle the result of coin search."""
+        if exists:
+            current_values = list(self.coin_dropdown.cget("values"))
+            if coin not in current_values:
+                current_values.append(coin)
+                self.coin_dropdown.configure(values=current_values)
+                self.selected_coin.set(coin)
+                self.status_label.configure(text=f"Added {coin} to the list")
+            else:
+                self.status_label.configure(text=f"{coin} is already in the list")
+        else:
+            self.status_label.configure(text=f"Coin {coin} not found")
+
+    def _finish_search(self):
+        """Clean up after search completes."""
+        self.search_loading = False
+        self.loading_label.pack_forget()  # Hide loading label
+        self.search_entry.configure(state="normal")
+        self.search_entry.delete(0, "end")  # Clear search entry
 
     def _show_error_message(self, message: str):
         """Display an error message in the canvas."""
