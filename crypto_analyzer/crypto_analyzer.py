@@ -5,7 +5,6 @@ This module provides comprehensive analysis and visualization of cryptocurrency 
 including technical indicators, trend analysis, and price predictions.
 """
 
-from datetime import timedelta
 
 import os
 import yaml
@@ -15,7 +14,6 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.ensemble import RandomForestRegressor
 
 from utils import setup_logger
@@ -90,7 +88,7 @@ class CryptoAnalyzer:
             logger.error("Failed to load data from '%s': %s", self.csv_file_path, str(e))
             raise
 
-    def calculate_technical_indicators(self, coin: str) -> pd.DataFrame:
+    def calculate_technical_indicators(self, coin: str, start_date: str = None, end_date: str = None) -> pd.DataFrame:
         """Calculate various technical indicators for a specific coin."""
         try:
             logger.info("Calculating technical indicators for %s", coin)
@@ -100,6 +98,15 @@ class CryptoAnalyzer:
             # Filter data for the specific coin
             coin_data = self.data[self.data['coin'] == base_coin].copy()
             
+            # Filter by date range if provided
+            if start_date or end_date:
+                if start_date:
+                    start_date = pd.to_datetime(start_date)
+                    coin_data = coin_data[coin_data['date'] >= start_date]
+                if end_date:
+                    end_date = pd.to_datetime(end_date)
+                    coin_data = coin_data[coin_data['date'] <= end_date]
+
             if coin_data.empty:
                 logger.warning("No data found for coin %s", coin)
                 return pd.DataFrame()
@@ -173,16 +180,25 @@ class CryptoAnalyzer:
             logger.error("Error preparing prediction data: %s", str(e))
             raise
 
-    def predict_future_prices(self, coin: str, days_ahead: int = 730) -> pd.DataFrame:
-        """Predict future prices using Random Forest model."""
+    def predict_future_prices(self, coin: str, start_date: str = None, end_date: str = None) -> pd.DataFrame:
+        """Predict future cryptocurrency prices using machine learning."""
         try:
-            logger.info("Predicting future prices for %s over %d days", coin, days_ahead)
-            # Extract base coin from symbol if needed
+            logger.info("Predicting future prices for %s", coin)
+            # Extract base coin from symbol if needed (e.g., "BTC/USDT" -> "BTC")
             base_coin = coin.split('/')[0] if '/' in coin else coin
             
-            # Get data for the specific coin
+            # Filter data for the specific coin
             coin_data = self.data[self.data['coin'] == base_coin].copy()
             
+            # Filter by date range if provided
+            if start_date or end_date:
+                if start_date:
+                    start_date = pd.to_datetime(start_date)
+                    coin_data = coin_data[coin_data['date'] >= start_date]
+                if end_date:
+                    end_date = pd.to_datetime(end_date)
+                    coin_data = coin_data[coin_data['date'] <= end_date]
+
             if coin_data.empty:
                 logger.warning("No data found for coin %s", coin)
                 return pd.DataFrame()
@@ -223,7 +239,7 @@ class CryptoAnalyzer:
             # Make predictions
             future_dates = pd.date_range(
                 start=coin_data['date'].iloc[-1],
-                periods=days_ahead + 1,
+                periods=730 + 1,
                 freq='D'
             )[1:]
             
@@ -235,7 +251,7 @@ class CryptoAnalyzer:
             predictions.append(pred)
             
             # Update sequence for subsequent predictions
-            for _ in range(1, days_ahead):
+            for _ in range(1, 730):
                 # Update the sequence by shifting and adding new prediction
                 new_row = np.zeros(len(features))  # Create new row with features
                 new_row[3] = pred  # Set close price (index 3)
@@ -264,21 +280,16 @@ class CryptoAnalyzer:
             logger.error("Failed to predict prices for %s: %s", coin, str(e))
             raise
 
-    def plot_analysis(self, coin: str, export_format='png') -> str:
-        """Create comprehensive interactive plots for analysis."""
+    def plot_analysis(self, coin: str, export_format: str = "png", start_date: str = None, end_date: str = None) -> str:
+        """Generate and save analysis plots."""
         try:
-            # Extract base coin from symbol if needed
+            logger.info("Generating analysis plots for %s", coin)
+            # Extract base coin from symbol if needed (e.g., "BTC/USDT" -> "BTC")
             base_coin = coin.split('/')[0] if '/' in coin else coin
             
-            # Get the data for this coin
-            coin_data = self.data[self.data['coin'] == base_coin].copy()
-            
-            if coin_data.empty:
-                logger.warning("No data found for plotting analysis of %s", coin)
-                return ""
-            
-            coin_data = self.calculate_technical_indicators(coin)
-            predictions = self.predict_future_prices(coin)
+            # Calculate indicators and predictions
+            indicators_df = self.calculate_technical_indicators(coin, start_date, end_date)
+            predictions_df = self.predict_future_prices(coin, start_date, end_date)
 
             # Create subplots
             fig = make_subplots(
@@ -292,11 +303,11 @@ class CryptoAnalyzer:
             # Price and Moving Averages
             fig.add_trace(
                 go.Candlestick(
-                    x=coin_data['date'],
-                    open=coin_data['open'],
-                    high=coin_data['high'],
-                    low=coin_data['low'],
-                    close=coin_data['close'],
+                    x=indicators_df['date'],
+                    open=indicators_df['open'],
+                    high=indicators_df['high'],
+                    low=indicators_df['low'],
+                    close=indicators_df['close'],
                     name='Price'
                 ),
                 row=1,
@@ -305,8 +316,8 @@ class CryptoAnalyzer:
 
             fig.add_trace(
                 go.Scatter(
-                    x=coin_data['date'],
-                    y=coin_data['SMA_20'],
+                    x=indicators_df['date'],
+                    y=indicators_df['SMA_20'],
                     name='SMA_20',
                     line=dict(color='blue')
                 ),
@@ -316,8 +327,8 @@ class CryptoAnalyzer:
 
             fig.add_trace(
                 go.Scatter(
-                    x=coin_data['date'],
-                    y=coin_data['SMA_50'],
+                    x=indicators_df['date'],
+                    y=indicators_df['SMA_50'],
                     name='SMA_50',
                     line=dict(color='orange')
                 ),
@@ -327,8 +338,8 @@ class CryptoAnalyzer:
 
             fig.add_trace(
                 go.Scatter(
-                    x=coin_data['date'],
-                    y=coin_data['SMA_200'],
+                    x=indicators_df['date'],
+                    y=indicators_df['SMA_200'],
                     name='SMA_200',
                     line=dict(color='green')
                 ),
@@ -339,8 +350,8 @@ class CryptoAnalyzer:
             # Add predictions
             fig.add_trace(
                 go.Scatter(
-                    x=predictions['date'],
-                    y=predictions['predicted_price'],
+                    x=predictions_df['date'],
+                    y=predictions_df['predicted_price'],
                     name='Price Prediction',
                     line=dict(color='red', dash='dash')
                 ),
@@ -351,8 +362,8 @@ class CryptoAnalyzer:
             # Volume
             fig.add_trace(
                 go.Bar(
-                    x=coin_data['date'],
-                    y=coin_data['volume'],
+                    x=indicators_df['date'],
+                    y=indicators_df['volume'],
                     name='Volume'
                 ),
                 row=2,
@@ -362,8 +373,8 @@ class CryptoAnalyzer:
             # RSI
             fig.add_trace(
                 go.Scatter(
-                    x=coin_data['date'],
-                    y=coin_data['RSI'],
+                    x=indicators_df['date'],
+                    y=indicators_df['RSI'],
                     name='RSI',
                     line=dict(color='purple')
                 ),
@@ -390,8 +401,8 @@ class CryptoAnalyzer:
             # MACD
             fig.add_trace(
                 go.Scatter(
-                    x=coin_data['date'],
-                    y=coin_data['MACD'],
+                    x=indicators_df['date'],
+                    y=indicators_df['MACD'],
                     name='MACD',
                     line=dict(color='blue')
                 ),
@@ -401,8 +412,8 @@ class CryptoAnalyzer:
 
             fig.add_trace(
                 go.Scatter(
-                    x=coin_data['date'],
-                    y=coin_data['Signal_Line'],
+                    x=indicators_df['date'],
+                    y=indicators_df['Signal_Line'],
                     name='Signal Line',
                     line=dict(color='orange')
                 ),

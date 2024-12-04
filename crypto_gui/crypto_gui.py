@@ -5,11 +5,13 @@ This module provides a modern graphical user interface for the cryptocurrency
 analysis application using CustomTkinter.
 """
 
+
 import os
 import threading
 import yaml
 
 import customtkinter as ctk
+from tkcalendar import DateEntry
 
 from PIL import Image, ImageTk
 from utils import setup_logger
@@ -67,6 +69,8 @@ class CryptoGUI:
         self.search_entry = None
         self.search_loading = False
         self.loading_label = None
+        self.start_date = None
+        self.end_date = None
 
         # Initialize GUI components
         self._create_sidebar()
@@ -153,6 +157,50 @@ class CryptoGUI:
                 dynamic_resizing=False
             )
             self.coin_dropdown.pack(pady=5, padx=10)
+
+            # Date selection
+            date_label = ctk.CTkLabel(
+                self.sidebar,
+                text="Date Range:",
+                anchor="center"
+            )
+            date_label.pack(pady=5)
+
+            # Start date
+            start_date_label = ctk.CTkLabel(
+                self.sidebar,
+                text="Start Date:",
+                anchor="center"
+            )
+            start_date_label.pack(pady=2)
+
+            self.start_date = DateEntry(
+                self.sidebar,
+                width=12,
+                background='darkblue',
+                foreground='white',
+                borderwidth=2,
+                date_pattern='yyyy-mm-dd'
+            )
+            self.start_date.pack(pady=2)
+
+            # End date
+            end_date_label = ctk.CTkLabel(
+                self.sidebar,
+                text="End Date:",
+                anchor="center"
+            )
+            end_date_label.pack(pady=2)
+
+            self.end_date = DateEntry(
+                self.sidebar,
+                width=12,
+                background='darkblue',
+                foreground='white',
+                borderwidth=2,
+                date_pattern='yyyy-mm-dd'
+            )
+            self.end_date.pack(pady=2)
 
             # Export format selection
             format_label = ctk.CTkLabel(
@@ -297,7 +345,19 @@ class CryptoGUI:
         try:
             # Store selected coin in a class variable for the callback to use
             self.current_coin = selected_coin
-            self.fetch_data()  # Call without parameters
+            
+            # Get selected dates
+            start_date = self.start_date.get_date()
+            end_date = self.end_date.get_date()
+            
+            # Convert dates to string format YYYY-MM-DD
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            logger.info(f"Fetching data for {selected_coin} from {start_date_str} to {end_date_str}")
+            
+            # Pass dates to fetch_data callback
+            self.fetch_data(start_date=start_date_str, end_date=end_date_str)
 
             logger.info("Data fetch completed successfully for %s", selected_coin)
             self.status_label.configure(text=f"Data fetch completed for {selected_coin}")
@@ -331,7 +391,19 @@ class CryptoGUI:
         try:
             # Store selected coin in a class variable for the callback to use
             self.current_coin = selected_coin
-            self.analyze_data()  # Call without parameters
+            
+            # Get selected dates
+            start_date = self.start_date.get_date()
+            end_date = self.end_date.get_date()
+            
+            # Convert dates to string format YYYY-MM-DD
+            start_date_str = start_date.strftime('%Y-%m-%d')
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            logger.info(f"Analyzing data for {selected_coin} from {start_date_str} to {end_date_str}")
+            
+            # Pass dates to analyze_data callback
+            self.analyze_data(start_date=start_date_str, end_date=end_date_str)
 
             logger.info("Analysis completed successfully for %s", selected_coin)
             self.status_label.configure(text=f"Analysis completed for {selected_coin}")
@@ -408,7 +480,7 @@ class CryptoGUI:
 
             # Configure canvas scrolling
             self.result_canvas.bind(
-                '<Configure>',
+                '<Configure>', 
                 lambda e: self.result_canvas.configure(scrollregion=self.result_canvas.bbox("all"))
             )
 

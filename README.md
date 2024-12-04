@@ -9,7 +9,7 @@ A comprehensive Python application for cryptocurrency data analysis, featuring r
   - Historical price data retrieval (OHLCV)
   - Support for any cryptocurrency trading pair
   - Top coins by market cap discovery
-  - Configurable date ranges
+  - Flexible date range selection with calendar widgets
   - Automated data updates
 
 - **Advanced Technical Analysis**
@@ -20,6 +20,7 @@ A comprehensive Python application for cryptocurrency data analysis, featuring r
   - Volume Analysis
   - Market Trend Detection
   - Price prediction using Random Forest (2-year forecast)
+  - Date range filtered analysis
 
 - **Interactive Visualization**
   - Dynamic candlestick charts
@@ -29,15 +30,18 @@ A comprehensive Python application for cryptocurrency data analysis, featuring r
   - Export to PNG and HTML formats
   - Zoomable and pannable charts
   - Customizable time ranges
+  - Date-filtered visualizations
 
 - **Modern GUI Interface**
   - Dark theme using CustomTkinter
   - Real-time status updates
   - Coin search functionality
   - Top coins selection
+  - Calendar widgets for date selection
   - Threaded operations for responsiveness
   - Progress indicators
   - Error handling and user feedback
+  - Organized sidebar layout
 
 ## Project Structure
 
@@ -67,22 +71,34 @@ cryptocurrency-analysis/
   customtkinter>=5.1.2
   pillow>=9.0.0
   kaleido==0.1.*
+  tkcalendar>=1.6.1
   ```
 
 ## Installation
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/dzaja123/cryptocurrency-analysis.git
    cd cryptocurrency-analysis
    ```
 
-2. Install dependencies:
+2. Set up a virtual environment:
+   ```bash
+   # Windows
+   python -m venv venv
+   .\venv\Scripts\activate
+
+   # Linux/macOS
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+3. Install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
 
-3. Configure `config.yaml`:
+4. Configure `config.yaml`:
    ```yaml
    coins:
      - symbol: "BTC/USDT"
@@ -100,13 +116,20 @@ cryptocurrency-analysis/
    python main.py
    ```
 
-2. Using the GUI:
-   - **Search & Add Coins**: Use the search box to find specific cryptocurrencies
-   - **Fetch Data**: Click "Fetch Data" to retrieve historical data for selected coins
-   - **Analyze**: Generate technical analysis and predictions with "Analyze Data"
-   - **View Results**: Examine interactive charts and analysis in the main window
-   - **Export**: Choose between PNG and HTML export formats
-   - **Top Coins**: Quickly access top cryptocurrencies by market cap
+2. Using the Interface:
+   - Enter a cryptocurrency symbol in the search bar or select from top coins
+   - Select a date range using the calendar widgets:
+     * Start Date: Choose the beginning of your analysis period
+     * End Date: Choose the end of your analysis period
+     * Default: Last 365 days if no dates are selected
+   - Choose your preferred export format (PNG/HTML)
+   - Click "Fetch Data" to retrieve historical data
+   - Click "Analyze Data" to generate analysis and visualizations
+
+3. Analysis Results:
+   - View technical indicators and price predictions
+   - Interact with the generated charts
+   - Results are saved in the `analysis_results` directory
 
 ## Features in Detail
 
