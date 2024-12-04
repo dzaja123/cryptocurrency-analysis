@@ -6,13 +6,16 @@ by utilizing the CryptoDataFetcher and CryptoAnalyzer classes, and provides
 a modern GUI interface for user interaction.
 """
 
-from PIL import Image, ImageTk
+from typing import Optional, List, Dict, Any
+
 import os
 import pandas as pd
 
+from PIL import Image, ImageTk
+
+from crypto_gui.crypto_gui import CryptoGUI
 from crypto_data_fetcher.crypto_data_fetcher import CryptoDataFetcher
 from crypto_analyzer.crypto_analyzer import CryptoAnalyzer
-from crypto_gui.crypto_gui import CryptoGUI
 
 from utils import setup_logger
 
@@ -21,37 +24,41 @@ logger = setup_logger()
 
 
 class CryptoApp:
-    """CryptoApp class for cryptocurrency analysis application."""
-    def __init__(self, config_file):
-        """Initialize the cryptocurrency analysis application."""
-        # Configuration file path
+    """Main application class for cryptocurrency analysis."""
+    
+    def __init__(self, config_file: str) -> None:
+        """Initialize the application with configuration.
+        
+        Args:
+            config_file: Path to the configuration file
+        """
         self.config_file = config_file
-
-        # Data fetcher instance
-        self.data_fetcher = CryptoDataFetcher(self.config_file)
-
-        # Data analyzer instance
-        self.analyzer = CryptoAnalyzer(self.config_file)
-
-        # Track currently selected coin
-        self.selected_coin = None
-
-        # Store reference to GUI
-        self.gui = None
-
-        # Store reference to displayed image
+        self.data_fetcher = CryptoDataFetcher(config_file)
+        self.analyzer = CryptoAnalyzer(config_file)
+        self.gui: Optional[CryptoGUI] = None
+        self.export_format: str = 'png'
+        self.selected_coin: Optional[str] = None
         self.current_image = None
 
-        # Default export format
-        self.export_format = "png"
-
-    def set_export_format(self, value):
-        """Set the export format from GUI."""
+    def set_export_format(self, value: str) -> None:
+        """Set the export format from GUI.
+        
+        Args:
+            value: The export format to set (e.g., 'png', 'jpg')
+        """
         self.export_format = value
         logger.debug("Export format set to: %s", value)
 
-    def fetch_data(self):
-        """Fetch historical cryptocurrency data."""
+    def fetch_data(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> None:
+        """Fetch historical cryptocurrency data.
+        
+        Args:
+            start_date: Optional start date for data fetching (YYYY-MM-DD)
+            end_date: Optional end date for data fetching (YYYY-MM-DD)
+            
+        Raises:
+            Exception: If no data was fetched or other errors occur
+        """
         try:
             logger.info("Starting data fetch...")
             if hasattr(self.gui, 'current_coin'):
@@ -67,7 +74,9 @@ class CryptoApp:
                     
                     historical_data = self.data_fetcher.fetch_historical_data(
                         coin_config['symbol'],
-                        coin_config['exchange']
+                        coin_config['exchange'],
+                        start_date=start_date,
+                        end_date=end_date
                     )
                     
                     # Save the fetched data
@@ -89,9 +98,9 @@ class CryptoApp:
                         # Reload data in analyzer
                         self.analyzer.load_data()
                 else:
-                    historical_data = self.data_fetcher.fetch_all_data()
+                    historical_data = self.data_fetcher.fetch_all_data(start_date=start_date, end_date=end_date)
             else:
-                historical_data = self.data_fetcher.fetch_all_data()
+                historical_data = self.data_fetcher.fetch_all_data(start_date=start_date, end_date=end_date)
 
             if historical_data.empty:
                 logger.error("No data was fetched")
@@ -102,8 +111,16 @@ class CryptoApp:
             logger.error("Error fetching data: %s", str(e))
             raise
 
-    def analyze_data(self):
-        """Analyze cryptocurrency data."""
+    def analyze_data(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> None:
+        """Analyze cryptocurrency data.
+        
+        Args:
+            start_date: Optional start date for analysis (YYYY-MM-DD)
+            end_date: Optional end date for analysis (YYYY-MM-DD)
+            
+        Raises:
+            Exception: If no data is available or other errors occur
+        """
         try:
             output_path = None
             logger.info("Starting data analysis...")
@@ -122,19 +139,24 @@ class CryptoApp:
                     # Create coin configuration for manually added coins
                     symbol = f"{coin}/USDT"
 
-                    # Calculate technical indicators
-                    self.analyzer.calculate_technical_indicators(symbol)
+                    # Calculate technical indicators with date range
+                    self.analyzer.calculate_technical_indicators(symbol, start_date=start_date, end_date=end_date)
                     
-                    # Predict future prices
-                    self.analyzer.predict_future_prices(symbol)
+                    # Predict future prices with date range
+                    self.analyzer.predict_future_prices(symbol, start_date=start_date, end_date=end_date)
                     
-                    # Generate and save the analysis plots
-                    output_path = self.analyzer.plot_analysis(coin, export_format=self.export_format)
+                    # Generate and save the analysis plots with date range
+                    output_path = self.analyzer.plot_analysis(
+                        coin,
+                        export_format=self.export_format,
+                        start_date=start_date,
+                        end_date=end_date
+                    )
                     
                     logger.info("Analysis completed for %s", coin)
                 else:
-                    # Analyze all coins
-                    self._analyze_all_coins()
+                    # Analyze all coins with date range
+                    self._analyze_all_coins(start_date=start_date, end_date=end_date)
                     logger.info("Analysis completed for all coins")
 
                 if output_path:
@@ -143,15 +165,52 @@ class CryptoApp:
 
             else:
                 # Default to analyzing all coins if no coin is selected
-                self._analyze_all_coins()
+                self._analyze_all_coins(start_date=start_date, end_date=end_date)
                 logger.info("Analysis completed for all coins")
 
         except Exception as e:
             logger.error("Error during analysis: %s", str(e))
             raise
 
-    def display_result_image(self, image_path):
-        """Display the analysis result image in the scrollable canvas."""
+    def _analyze_all_coins(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> None:
+        """Helper method to analyze all coins.
+        
+        Args:
+            start_date: Optional start date for analysis (YYYY-MM-DD)
+            end_date: Optional end date for analysis (YYYY-MM-DD)
+            
+        Raises:
+            Exception: If no data is available or other errors occur
+        """
+        if self.analyzer.data is None or self.analyzer.data.empty:
+            raise Exception("No data available. Please fetch data first.")
+
+        for coin_config in self.data_fetcher.coins:
+            try:
+                coin = coin_config['symbol']
+                coin_data = self.analyzer.data[self.analyzer.data['coin'] == coin]
+                if not coin_data.empty:
+                    self.analyzer.calculate_technical_indicators(coin, start_date=start_date, end_date=end_date)
+                    self.analyzer.predict_future_prices(coin, start_date=start_date, end_date=end_date)
+                    self.analyzer.plot_analysis(
+                        coin,
+                        export_format=self.export_format,
+                        start_date=start_date,
+                        end_date=end_date
+                    )
+            except Exception as e:
+                logger.error("Error analyzing %s: %s", coin, str(e))
+                continue
+
+    def display_result_image(self, image_path: str) -> None:
+        """Display the analysis result image in the scrollable canvas.
+        
+        Args:
+            image_path: Path to the image file to display
+            
+        Raises:
+            Exception: If there's an error loading or displaying the image
+        """
         try:
             # Load and resize image
             image = Image.open(image_path)
@@ -175,33 +234,33 @@ class CryptoApp:
             logger.error("Error displaying result image: %s", str(e))
             raise
 
-    def _analyze_all_coins(self):
-        """Helper method to analyze all coins."""
-        if self.analyzer.data is None or self.analyzer.data.empty:
-            raise Exception("No data available. Please fetch data first.")
-
-        for coin_config in self.data_fetcher.coins:
-            try:
-                coin = coin_config['symbol']
-                coin_data = self.analyzer.data[self.analyzer.data['coin'] == coin]
-                if not coin_data.empty:
-                    self.analyzer.calculate_technical_indicators(coin)
-                    self.analyzer.predict_future_prices(coin)
-                    self.analyzer.plot_analysis(coin, export_format=self.export_format)
-            except Exception as e:
-                logger.error("Error analyzing %s: %s", coin, str(e))
-                continue
-
     def search_coin(self, symbol: str) -> bool:
-        """Search if a coin exists on the exchange."""
+        """Search if a coin exists on the exchange.
+        
+        Args:
+            symbol: The cryptocurrency symbol to search for
+            
+        Returns:
+            bool: True if the coin exists, False otherwise
+            
+        Raises:
+            Exception: If there's an error during the search
+        """
         try:
             return self.data_fetcher.search_coin(symbol)
         except Exception as e:
             logger.error("Error searching for coin: %s", str(e))
             raise
 
-    def fetch_top_coins(self) -> list:
-        """Fetch top 15 coins by market cap."""
+    def fetch_top_coins(self) -> List[Dict[str, Any]]:
+        """Fetch top 15 coins by market cap.
+        
+        Returns:
+            List[Dict[str, Any]]: List of dictionaries containing coin information
+            
+        Raises:
+            Exception: If there's an error fetching top coins
+        """
         try:
             return self.data_fetcher.fetch_top_coins(limit=15)
         except Exception as e:
@@ -209,8 +268,12 @@ class CryptoApp:
             raise
 
 
-def main():
-    """Main function to run the cryptocurrency analysis application."""
+def main() -> None:
+    """Main function to run the cryptocurrency analysis application.
+    
+    Raises:
+        Exception: If there's an error starting or running the application
+    """
     try:
         logger.info("Starting Crypto Analysis Application")
         # Initialize the application
