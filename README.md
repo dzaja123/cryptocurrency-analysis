@@ -100,13 +100,8 @@ cryptocurrency-analysis/
 
 4. Configure `config.yaml`:
    ```yaml
-   coins:
-     - symbol: "BTC/USDT"
-       exchange: "binance"
    csv_file_path: "data/combined_crypto_data.csv"
    output_dir: "analysis_results"
-   start_date: "2017-01-01"
-   end_date: "now"
    ```
 
 ## Usage
@@ -126,10 +121,11 @@ cryptocurrency-analysis/
    - Click "Fetch Data" to retrieve historical data
    - Click "Analyze Data" to generate analysis and visualizations
 
-3. Analysis Results:
-   - View technical indicators and price predictions
-   - Interact with the generated charts
-   - Results are saved in the `analysis_results` directory
+3. Data Persistence:
+   - Historical data is saved in the `data` directory
+   - Analysis results are stored in `analysis_results`
+   - Application logs are maintained in `logs`
+   - All data persists between sessions for offline analysis
 
 ## Features in Detail
 
