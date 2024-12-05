@@ -2,6 +2,10 @@
 
 A comprehensive Python application for cryptocurrency data analysis, featuring real-time data fetching, technical analysis, price predictions, and interactive visualizations. Built with modern libraries and a user-friendly GUI interface.
 
+## Demo Usage
+
+![Demo Image](resources/demo.gif)
+
 ## Key Features
 
 - **Real-time Data Fetching**
@@ -190,10 +194,6 @@ cryptocurrency-analysis/
 - Data validation checks
 - User-friendly error messages
 - Detailed error logging
-
-## Demo Usage
-
-![Demo Image](resources/demo.gif)
 
 ## Contributing
 
