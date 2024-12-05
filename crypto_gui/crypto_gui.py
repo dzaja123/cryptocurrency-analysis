@@ -28,7 +28,8 @@ class CryptoGUI:
         analyze_data_callback: callable,
         set_export_format_callback: callable,
         search_coin_callback: callable,
-        fetch_top_coins_callback: callable
+        fetch_top_coins_callback: callable,
+        config_file: str,
         ):
         """Initialize the GUI with callback functions for data operations."""
         logger.info("Initializing Cryptocurrency Analysis GUI")
@@ -41,6 +42,7 @@ class CryptoGUI:
         self.root = ctk.CTk()
         self.root.title("Cryptocurrency Analysis Dashboard")
         self.root.geometry("1200x800")
+        self.root.resizable(False, False)
 
         # Store callbacks
         self.fetch_data = fetch_data_callback
@@ -50,7 +52,7 @@ class CryptoGUI:
         self.fetch_top_coins = fetch_top_coins_callback
 
         # Load configuration
-        self.config_file = 'config.yaml'
+        self.config_file = config_file
 
         # Initialize class attributes
         self.sidebar = None
@@ -291,9 +293,10 @@ class CryptoGUI:
                 
                 Quick Start Guide:
                 1. Select a Coin from the dropdown menu
-                2. Click "Fetch Data" to retrieve historical data
-                3. Click "Analyze Data" to generate analysis
-                4. View the results in this area
+                2. Select a Date Range
+                3. Click "Fetch Data" to retrieve historical data
+                4. Click "Analyze Data" to generate analysis
+                5. View the results in this area
                 
                 Note: Analysis results will be saved as PNG by default.
                 Check "Also save as HTML" to save in both formats.
@@ -542,8 +545,9 @@ class CryptoGUI:
                             No Analysis Available for {coin}
                             
                             To generate analysis:
-                            1. Click "Fetch Data" to retrieve the latest data
-                            2. Click "Analyze Data" to generate the analysis
+                            1. Select a Date Range
+                            2. Click "Fetch Data" to retrieve the latest data
+                            3. Click "Analyze Data" to generate the analysis
                         """)
         except Exception as e:
             error_msg = f"Error viewing analysis: {str(e)}"

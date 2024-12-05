@@ -47,6 +47,7 @@ A comprehensive Python application for cryptocurrency data analysis, featuring r
 
 ```
 cryptocurrency-analysis/
+├── main.py                   # Main application entry point
 ├── crypto_analyzer/          # Technical analysis and visualization
 ├── crypto_data_fetcher/      # Data fetching and processing
 ├── crypto_gui/               # GUI interface and controls
@@ -54,8 +55,12 @@ cryptocurrency-analysis/
 ├── data/                     # Data storage
 ├── logs/                     # Application logs
 ├── analysis_results/         # Analysis output
+├── resources/                # Additional resources for the Readme
+├── .gitignore               # Ignored files
+├── requirements.txt          # List of dependencies
+├── README.md                 # Project documentation
+├── LICENSE                   # License information
 └── config.yaml              # Configuration file
-```
 
 ## Requirements
 
@@ -184,6 +189,10 @@ cryptocurrency-analysis/
 - Data validation checks
 - User-friendly error messages
 - Detailed error logging
+
+## Demo Usage
+
+![Demo Image](resources/demo.gif)
 
 ## Contributing
 

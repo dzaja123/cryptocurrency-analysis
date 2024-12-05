@@ -286,7 +286,8 @@ def main() -> None:
             analyze_data_callback=app.analyze_data,
             set_export_format_callback=app.set_export_format,
             search_coin_callback=app.search_coin,
-            fetch_top_coins_callback=app.fetch_top_coins
+            fetch_top_coins_callback=app.fetch_top_coins,
+            config_file=config_file
         )
         # Start the GUI event loop
         app.gui.run()
