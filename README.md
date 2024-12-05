@@ -56,11 +56,11 @@ cryptocurrency-analysis/
 ├── logs/                     # Application logs
 ├── analysis_results/         # Analysis output
 ├── resources/                # Additional resources for the Readme
-├── .gitignore               # Ignored files
+├── .gitignore                # Ignored files
 ├── requirements.txt          # List of dependencies
 ├── README.md                 # Project documentation
 ├── LICENSE                   # License information
-└── config.yaml              # Configuration file
+└── config.yaml               # Configuration file
 
 ## Requirements
 
