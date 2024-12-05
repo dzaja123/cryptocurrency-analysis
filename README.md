@@ -61,6 +61,7 @@ cryptocurrency-analysis/
 ├── README.md                 # Project documentation
 ├── LICENSE                   # License information
 └── config.yaml               # Configuration file
+```
 
 ## Requirements
 
