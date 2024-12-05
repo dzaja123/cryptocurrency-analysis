@@ -21,11 +21,11 @@ logger = setup_logger()
 
 class CryptoDataFetcher:
     """Class for fetching and processing crypto data."""
-    def __init__(self, config_file: str, save_to_csv: bool = True):
-        self.config_file = config_file
+    def __init__(self, config_file: str = None, save_to_csv: bool = True):
         self.save_to_csv = save_to_csv
-        self.coins, self.csv_file_path = self.load_config()
-        logger.info("Configuration loaded.")
+        self.config_file = config_file
+        self.csv_file_path = self.load_config()
+        self.coins = self.fetch_top_coins()
 
     def load_config(self) -> tuple:
         """Load coin configurations and CSV file path from a YAML file."""
@@ -34,7 +34,6 @@ class CryptoDataFetcher:
                 config = yaml.safe_load(file)
             logger.info("Configuration successfully loaded from YAML.")
             return (
-                config['coins'],
                 config['csv_file_path']
             )
         except Exception as e:
@@ -128,12 +127,20 @@ class CryptoDataFetcher:
             markets = exchange.fetch_markets()
             usdt_markets = [market for market in markets if market['quote'] == 'USDT']
             
-            # Get tickers with volume info
+            # Get tickers with market cap info
             tickers = exchange.fetch_tickers([market['symbol'] for market in usdt_markets[:50]])
             
-            # Sort by volume and get top ones
+            # Calculate market cap (price * circulating supply) and sort
+            market_caps = []
+            for symbol, ticker in tickers.items():
+                if ticker['last'] and ticker['baseVolume']:
+                    # Using volume as a proxy for circulating supply since it's not directly available
+                    market_cap = ticker['last'] * ticker['baseVolume']
+                    market_caps.append((symbol, market_cap))
+            
+            # Sort by market cap
             sorted_markets = sorted(
-                [(symbol, ticker['quoteVolume']) for symbol, ticker in tickers.items()],
+                market_caps,
                 key=lambda x: x[1] or 0,
                 reverse=True
             )
