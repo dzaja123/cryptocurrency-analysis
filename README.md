@@ -98,12 +98,7 @@ cryptocurrency-analysis/
    pip install -r requirements.txt
    ```
 
-4. Create necessary directories (if they don't exist):
-   ```bash
-   mkdir -p data logs analysis_results
-   ```
-
-5. Configure `config.yaml`:
+4. Configure `config.yaml`:
    ```yaml
    csv_file_path: "data/combined_crypto_data.csv"
    output_dir: "analysis_results"
